@@ -5,7 +5,7 @@ from data_structures.sim_structures import *
 
 def sim(num_planes, max_particles_per_bin, 
         r=(0.5, 1.5), z=(0.0, 1.0), v=(0.0, 1.0),
-        v_grid_size=2,
+        vgrid_size=2,
         debug=False):
     """
         Every process will be running this function. As a result, this func
@@ -31,6 +31,8 @@ def sim(num_planes, max_particles_per_bin,
     plane = np.int(np.floor(rank / num_planes))
     num_bins_per_plane = np.int(np.floor(num_procs / num_planes))
 
-    # Now, based on its rank, this bin needs an r,z,(v0,v1) assignment. 
+    # how we might rank the bins per plane, this process' rank inside the 
+    # plane we're currently assigning it to
     per_plane_rank = rank % num_bins_per_plane
+
     
