@@ -31,7 +31,7 @@ def sim(num_planes, max_particles_per_bin,
     # spatial values each bin is tied to, and what velocity it will
     # represent, and which phi-slice (plane) it's in
     
-    plane = np.int(np.floor(rank / num_planes))
+    plane = np.int(np.floor(rank % num_planes))
     num_bins_per_plane = np.int(np.floor(num_procs / num_planes))
 
     # how we might rank the bins per plane, this process' rank inside the 
@@ -52,18 +52,22 @@ def sim(num_planes, max_particles_per_bin,
     # if the number of bins per plane is square
     if (np.sqrt(num_bins_per_plane) % 1 == 0.0):
         # allocate bins in the right chunks
-        
-        
+        root = np.sqrt(num_bins_per_plane)
+        dr = (r[1] - r[0]) / root
+        dz = (z[1] - z[0]) / root
+        r_point = dr * (per_plane_rank % root)
+        z_point = dz * np.floor(per_plane_rank / root)
     else:
         # Realistically the right way to do this is to make a list of divisors
         # and choose the "middle" two (of an orderd list of divisors), then have
         # the r,z parts map correctly to that. 
-        raise NotImplementedError("haven't decided how to do this yet")
+        raise NotImplementedError("haven't decided how to do this yet, num_planes_per_bin non-square")
 
-
+    bin_ = Bin(r_point, z_point, v, plane)
 
     if debug:
-        #print(f"""Process {rank} on Plane {plane} (plane-ordered num) {per_plane_rank} with {num_bins_per_plane} bins per plane""")
+        print("Process", rank, "on plane", plane, "with r=", r_point, "z=", z_point)
+
 
     
     
