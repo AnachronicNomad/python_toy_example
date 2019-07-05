@@ -3,7 +3,7 @@ from mpi4py import MPI
 from data_structures.sim_structures import *
 
 def sim(num_planes, num_bins_per_plane, max_particles_per_bin, 
-        r=(0.5, 1.5), z=(0,1),
+        r=(0.5, 1.5), z=(0,1), v=(0,1000),
         debug=False):
     """
         Every process will be running this function. As a result, this func
