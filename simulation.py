@@ -55,8 +55,8 @@ def sim(num_planes, max_particles_per_bin,
         root = np.sqrt(num_bins_per_plane)
         dr = (r[1] - r[0]) / root
         dz = (z[1] - z[0]) / root
-        r_point = dr * (per_plane_rank % root)
-        z_point = dz * np.floor(per_plane_rank / root)
+        r_point = dr * (per_plane_rank % root) + r[0]
+        z_point = dz * np.floor(per_plane_rank / root) + z[0]
     else:
         # Realistically the right way to do this is to make a list of divisors
         # and choose the "middle" two (of an orderd list of divisors), then have
@@ -66,8 +66,17 @@ def sim(num_planes, max_particles_per_bin,
     bin_ = Bin(r_point, z_point, v, plane)
 
     if debug:
-        print("Process", rank, "on plane", plane, "with r=", r_point, "z=", z_point)
+        print("Process", rank, "on plane", plane, "plane_rank", plane_rank, "with r=", r_point, "z=", z_point)
 
+    """Now generate the particles per each bin"""
+    for i in range(0, np.random.randint(1, max_particles_per_bin+1)):
+        w = np.random.weibull(a=np.random.randint(0,7))
+        v = np.random.uniform(low=v[0], high=v[1])
+
+        bin_.add_particle(Particle(weight=w, velocity=v))
+
+    # make sure the constraint vector is updated
+    bin_.update_constraints()
 
     
     
