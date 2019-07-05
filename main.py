@@ -4,7 +4,7 @@ from data_structures.sim_structures import *
 from simulation import sim
 
 def main():
-    sim(4, 16, 3, debug=True)
+    sim(4, 3, debug=True)
 
 
 if __name__ == '__main__':
