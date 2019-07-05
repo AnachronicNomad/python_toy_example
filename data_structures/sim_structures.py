@@ -1,4 +1,4 @@
-# sim_structures.py
+# file: sim_structures.py
 import numpy as np
 
 """
@@ -13,13 +13,13 @@ class Particle():
 
 
 class Bin():
-    def __init__(self, r, z, v):
+    def __init__(self, r, z, v, plane_id):
         self.r = r # the spatial coordinate in terms of radial distance from
                    # center of torus
         self.z = z
-        
         self.v = (v[0], v[1]) # lower, upper bounds of velocity space
                               # represented by this bin
+        self.plane_id = plane_id # φindex of the plane this bin is tied to
         
         self.particles = []   # Populate particles per bin during the sim
 
