@@ -78,5 +78,5 @@ def sim(num_planes, max_particles_per_bin,
     # make sure the constraint vector is updated
     bin_.update_constraints()
 
-    
+    bin_.build_constraint_mat()
     
