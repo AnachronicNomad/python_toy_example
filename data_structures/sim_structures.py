@@ -44,5 +44,6 @@ class Bin():
 
 
 class Plane():
-    def __init__(self, bins=[]):
+    def __init__(self, id, bins=[]):
+        self.id = id
         self.bins = bins
