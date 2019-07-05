@@ -43,6 +43,11 @@ class Bin():
         self.constraints[2] = sum(w*(v**2) for w,v in zip([p.weight for p in particles], [p.velocity for p in particles])) 
 
 
+    def build_constraint_mat(self):
+        self.mat = np.stack((([1, p.v, p.v**2] for p in self.particles)), axis=-1)
+
+
+
 class Plane():
     def __init__(self, id, bins=[]):
         self.id = id
