@@ -3,6 +3,13 @@ import numpy as np
 from mpi4py import MPI
 from data_structures.sim_structures import *
 
+def determine_spatial_coords_from_global_rank():
+    return None
+
+
+def determine_group_comm_from_global_rank():
+    return None
+
 
 def sim(num_planes, max_particles_per_bin, 
         r=(0.5, 1.5), z=(0.0, 1.0), v=(0.0, 1.0),
@@ -26,6 +33,18 @@ def sim(num_planes, max_particles_per_bin,
     comm_world = MPI.COMM_WORLD # can be an arbitrary communicator
     num_procs = comm_world.Get_size() # Remember, this is num. of bins
     rank = comm_world.Get_rank() # what bin 
+
+    """Now generate the particles per bin, update constraint vec and matrix"""
+    for i in range(0, np.random.randint(1, max_particles_per_bin+1)):
+        w = np.random.weibull(a=np.random.randint(0,7))
+        v = np.random.uniform(low=v[0], high=v[1])
+
+        bin_.add_particle(Particle(weight=w, velocity=v))
+
+    # make sure the constraint vector is updated
+    bin_.update_constraints()
+    bin_.build_constraint_mat()
+    
     
     # Here, we're going to use divisions of ranks to determine what 
     # spatial values each bin is tied to, and what velocity it will
@@ -68,15 +87,8 @@ def sim(num_planes, max_particles_per_bin,
     if debug:
         print("Process", rank, "on plane", plane, "plane_rank", plane_rank, "with r=", r_point, "z=", z_point)
 
-    """Now generate the particles per each bin"""
-    for i in range(0, np.random.randint(1, max_particles_per_bin+1)):
-        w = np.random.weibull(a=np.random.randint(0,7))
-        v = np.random.uniform(low=v[0], high=v[1])
 
-        bin_.add_particle(Particle(weight=w, velocity=v))
-
-    # make sure the constraint vector is updated
-    bin_.update_constraints()
-
-    bin_.build_constraint_mat()
+    """Create group and communicator for axisymmetry"""
+    
+    return None
     
