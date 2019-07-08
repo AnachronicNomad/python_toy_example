@@ -89,7 +89,21 @@ def sim(num_planes, max_particles_per_bin,
 
     """Create group and communicator for axisymmetry"""
     axi_comm = determine_group_comm_from_global_rank(comm_world, num_procs, rank, bin_)
+
+    local_rank = axi_comm.Get_rank()
+
+    # Gather the rank and number of particles in the bins for the root process.
+    sendbuf = np.array([ rank, len(bin_.particles) ], dtype='int64')
+    recvbuf = np.empty([axi_comm.Get_size(), 2], dtype='int64')
+
+    # WARNING: This will force a synchronization across all threads. 
+    # There is an implicit MPI barrier in an Allgather.
+    axi_comm.Allgather(sendbuf, recvbuf)
+
     
-    
+
+
+    print("Process ", rank, "reports", recvbuf)
+
     return None
     
