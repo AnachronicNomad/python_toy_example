@@ -13,7 +13,7 @@ class Particle():
 
 
 class Bin():
-    def __init__(self, r, z, v, plane_id):
+    def __init__(self, plane_id, r, z, v):
         self.r = r # the spatial coordinate in terms of radial distance from
                    # center of torus
         self.z = z
@@ -44,8 +44,8 @@ class Bin():
 
 
     def build_constraint_mat(self):
-        tmp = [[1, p.velocity, p.velocity**2] for p in self.particles]
-        self.mat = np.stack(tmp, axis=-1)
+        tmp = [[1.0, p.velocity, p.velocity**2] for p in self.particles]
+        self.constraint_mat = np.stack(tmp, axis=-1)
 
 
 
