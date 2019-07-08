@@ -12,7 +12,7 @@
 int main(int argc, char* argv[]) {
 	if(argc != 2)
 	{
-		printf("usage: mpirun -n 4 ./hello {num_groups}\n");
+		printf("usage: mpirun -n {num_procs} ./hello {num_groups}\n");
 		exit(1);
 	}
 
