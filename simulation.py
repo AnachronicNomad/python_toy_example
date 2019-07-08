@@ -36,11 +36,14 @@ def determine_spatial_coords_from_global_rank(comm_world, num_procs, rank,
     return (r_point, z_point, v_range, phi_plane)
 
 
-def determine_group_comm_from_global_rank(comm_world, num_procs, rank):
+def determine_group_comm_from_global_rank(comm_world, num_procs, rank, bin):
     """
         For now, only velocity is split up
     """
-    return None
+    # Find scheme to assign a unique "color" to same (r,z) group
+    new_comm = comm_world.Split(color=1, key=rank)
+
+    return new_comm
 
 
 def sim(num_planes, max_particles_per_bin, 
@@ -85,6 +88,8 @@ def sim(num_planes, max_particles_per_bin,
     
 
     """Create group and communicator for axisymmetry"""
+    axi_comm = determine_group_comm_from_global_rank(comm_world, num_procs, rank, bin_)
+    
     
     return None
     
