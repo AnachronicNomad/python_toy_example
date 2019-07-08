@@ -152,6 +152,13 @@ def sim(num_planes, max_particles_per_bin,
 
     #print("Process", global_rank, "reports recv", full_matrix.shape)
 
+    ## Now that everybody in the communicator has the axisymmetric constraint
+    ## matrix, time to solve for the new weights with it's own constraint
+    ## vector
+    soln = np.linalg.lstsq(full_matrix, bin_.constraints, rcond=None)
+
+    print("Process", global_rank, "now has solution", soln)
+
 
     return None
     
