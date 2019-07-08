@@ -39,12 +39,13 @@ class Bin():
     
     def update_constraints(self):
         self.constraints[0] = sum(p.weight for p in self.particles)
-        self.constraints[1] = sum(w*v for w,v in zip([p.weight for p in particles], [p.velocity for p in particles]))
-        self.constraints[2] = sum(w*(v**2) for w,v in zip([p.weight for p in particles], [p.velocity for p in particles])) 
+        self.constraints[1] = sum(w*v for w,v in zip([p.weight for p in self.particles], [p.velocity for p in self.particles]))
+        self.constraints[2] = sum(w*(v**2) for w,v in zip([p.weight for p in self.particles], [p.velocity for p in self.particles])) 
 
 
     def build_constraint_mat(self):
-        self.mat = np.stack((([1, p.v, p.v**2] for p in self.particles)), axis=-1)
+        tmp = [[1, p.velocity, p.velocity**2] for p in self.particles]
+        self.mat = np.stack(tmp, axis=-1)
 
 
 

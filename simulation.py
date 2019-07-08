@@ -3,11 +3,43 @@ import numpy as np
 from mpi4py import MPI
 from data_structures.sim_structures import *
 
-def determine_spatial_coords_from_global_rank():
-    return None
+def determine_spatial_coords_from_global_rank(comm_world, num_procs, rank,
+                                              num_planes,
+                                              r=(0.5, 1.5), z=(0.0), v=(0.0,1.0)):
+    """
+        If there are more processes than planes, split up v-space
+        Assuming a single r,z coordinate for each phi_plane
+    """
+    r_point = (r[1] - r[0] / 2)
+    z_point = (z[1] - z[0] / 2)
+    v_range = (v[0], v[1])
+    phi_plane = 0
+
+    if num_procs < num_planes:
+        raise ValueError("There must be at least NUM_PROCS to represent the phi-planes")
+    elif (num_procs / num_planes) % 1.0 != 0.0:
+        # if the number of processes aren't a multiple of the number of planes, bad
+        raise ValueError("NUM_PROCS must be multiple of NUM_PLANES")
+    elif num_planes == num_procs:
+        phi_plane = rank
+    else:
+        # we have multiples of phi_planes and want to split up v_space
+        multiple = num_procs / num_planes
+
+        """ phi_plane here is given by block ordering. """
+        phi_plane = np.int(np.floor(rank / multiple))
+        plane_order = rank % multiple
+
+        v_step = (v[1] - v[0]) / multiple
+        v_range = ((v_step*plane_order) + v[0], v[0] + ((v_step*(plane_order+1))))
+
+    return (r_point, z_point, v_range, phi_plane)
 
 
-def determine_group_comm_from_global_rank():
+def determine_group_comm_from_global_rank(comm_world, num_procs, rank):
+    """
+        For now, only velocity is split up
+    """
     return None
 
 
@@ -35,58 +67,22 @@ def sim(num_planes, max_particles_per_bin,
     rank = comm_world.Get_rank() # what bin 
 
     """Now generate the particles per bin, update constraint vec and matrix"""
+    pos = determine_spatial_coords_from_global_rank(comm_world, num_procs, rank, 
+                                                    num_planes, r, z, v)
+    bin_ = Bin(pos[0], pos[1], pos[2], pos[3])
     for i in range(0, np.random.randint(1, max_particles_per_bin+1)):
         w = np.random.weibull(a=np.random.randint(0,7))
-        v = np.random.uniform(low=v[0], high=v[1])
+        v = np.random.uniform(low=bin_.v[0], high=bin_.v[1])
 
         bin_.add_particle(Particle(weight=w, velocity=v))
 
     # make sure the constraint vector is updated
     bin_.update_constraints()
     bin_.build_constraint_mat()
+
+    print("Process", rank, "has coords plane=", bin_.plane_id, "r=", bin_.r, "z=", bin_.z,
+            "v=", bin_.v)
     
-    
-    # Here, we're going to use divisions of ranks to determine what 
-    # spatial values each bin is tied to, and what velocity it will
-    # represent, and which phi-slice (plane) it's in
-    
-    plane = np.int(np.floor(rank % num_planes))
-    num_bins_per_plane = np.int(np.floor(num_procs / num_planes))
-
-    # how we might rank the bins per plane, this process' rank inside the 
-    # plane we're currently assigning it to
-    per_plane_rank = rank % num_bins_per_plane
-
-    """
-        Assume the bins are ordered correctly and have been assigned their
-        r,z,v values here.
-
-        Going to start with just having spatial locations realized, not
-        going to split up velocity space at all.
-    """
-    r_point = None
-    z_point = None
-    bin_ = None
-
-    # if the number of bins per plane is square
-    if (np.sqrt(num_bins_per_plane) % 1 == 0.0):
-        # allocate bins in the right chunks
-        root = np.sqrt(num_bins_per_plane)
-        dr = (r[1] - r[0]) / root
-        dz = (z[1] - z[0]) / root
-        r_point = dr * (per_plane_rank % root) + r[0]
-        z_point = dz * np.floor(per_plane_rank / root) + z[0]
-    else:
-        # Realistically the right way to do this is to make a list of divisors
-        # and choose the "middle" two (of an orderd list of divisors), then have
-        # the r,z parts map correctly to that. 
-        raise NotImplementedError("haven't decided how to do this yet, num_planes_per_bin non-square")
-
-    bin_ = Bin(r_point, z_point, v, plane)
-
-    if debug:
-        print("Process", rank, "on plane", plane, "plane_rank", plane_rank, "with r=", r_point, "z=", z_point)
-
 
     """Create group and communicator for axisymmetry"""
     
