@@ -134,6 +134,12 @@ def sim(num_planes, max_particles_per_bin,
     ## to send back out to the rest of the communicator. 
 
     # gather the constraint matrices on leading process for communicator
+    ## NOTE: This could be replaced with an MPI_Allgather, but I was having
+    ## issues given that the dimensions of each bins constraint matrix will 
+    ## be different across the entire axisymmetric communicator. This is 
+    ## something that will definitely need to be addressed in the Fortran 
+    ## implementation, since the buffer must be dynamically allocated 
+    ## with the appropriate size. 
     data = bin_.constraint_mat
     data = axi_comm.gather(data, root=0)
     tmp = np.empty([3, 1])
