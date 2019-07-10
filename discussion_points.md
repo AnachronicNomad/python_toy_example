@@ -13,8 +13,8 @@ The general form for ranks, groups, and communicators is to
 
 The reasons for this are:
 * while thread safe, operations on communicators can become blocking for all 
-  processess associated with that communicator, and this is mitigated by using 
-  Groups. None of the collective operations are interupt-safe, at least in the MPICH implementation.  
+  processes associated with that communicator, and this is mitigated by using 
+  Groups. None of the collective operations are interrupt-safe, at least in the MPICH implementation.  
 * MPICH implementation says MPI_Comm_split does an ALL_GATHER on the entire 
   parent communicator to find which process IDs have the specified color. 
 * ALL_GATHER has an implicit MPI_Barrier and synchronization prior to and 
@@ -64,8 +64,7 @@ Following that, the usual scatter, gather, and other operations are then availab
 
 __Pro__
 * Comparatively quick/easy to implement. 
-* Easy to quickly drop in to verify that the rest of the program is working 
-  correctly with the axisymmetric resampling and constraint-based quadratic optimization.
+* Easy to quickly drop in to verify that the rest of the program is working correctly with the axisymmetric resampling and constraint-based quadratic optimization.
 * Easy, small implementation allows this to be dropped into resamp_mod and 
   later replaced or modified over time with a more efficient or fault-tolerant implementation (not relying on process rank for figuring out the axisymmetric communicator, not putting the communication structure inside the resampling code, etc.)
 
@@ -83,42 +82,63 @@ __Status Quo__
 * Still going to have issues with how to share the constraint matrices given that they may have variable column dimensions. (Addressed in later section)
 
 __Sources__
-[0] https://www.mpich.org/static/docs/latest/www3/MPI_Comm_split.html
-[1] http://pages.tacc.utexas.edu/~eijkhout/pcse/html/mpi-comm.html#Splittingacommunicator
+
+- [0] https://www.mpich.org/static/docs/latest/www3/MPI_Comm_split.html
+
+- [1] http://pages.tacc.utexas.edu/~eijkhout/pcse/html/mpi-comm.html#Splittingacommunicator
 
 
 2. Relying on MPI_Group, inter- and intra-communications
 
-Each process may indepently determine its axisymmetric Group, or the process ranks it shares its constraint matrix info with. 
+Each process may independently determine its axisymmetric Group, or the process ranks it shares its constraint matrix info with. 
 Then, have each process create/lookup the communicator for that Group. 
 
->I am unsure if each process holds a unique communicator or a reference to a communicator held by the MPI implementation; or if MPI implementations account for not creating a new communicator for an identical group (to avoid unneccessary copies).
+>I am unsure if each process holds a unique communicator or a reference to a communicator held by the MPI implementation; or if MPI implementations account for not creating a new communicator for an identical group (to avoid unnecessary copies).
 >
-> I believe that MPI does not create per-process copies of the communicator when created from a group. It wouldn't make sense that per-process copies would exist and you could still do an Allgather on them. 
-
-Then, use the communicator to share the constraint matrices (addressed further in later section). 
+> I believe that MPI does _not_ create per-process copies of the communicator when created from a group. It wouldn't make sense that per-process copies would exist and you could still do an Allgather on them. 
 
 There are two mutually exclusive assumptions that can be made, which affect if a Group is created and how the communicator is generated. 
 
-(2a) There are no pre-existing groups which _must_ be relied on. 
+___
+
+(2a) There are no pre-existing groups which must be relied on. 
+
+Using the process rank and information about number of φ-planes, spatial grid topology, velocity phase space numbering, etc., determine the array of ranks which this process must communicate its constraint matrix to. 
 
 
-(2b) There is an existing group structure which should be relied on, additional groups are not prefered. (MPI object limit, memory constraints)
+(2b) There is an existing group structure which should be relied on, additional groups are not preferred. (MPI object limit, memory constraints)
+
+The way to accomplish this is to define an inter-communicator between two groups, where an existing group in this case may represent a φ-plane.
+
+___
+
+Then, the communicator may share the constraint matrices (implementation discussed in later section). 
 
 
 __Pro__
-* Non-blocking communication w.r.t. the simulation COMM_WORLD. Will not (_necessarily_) force synchronization across COMM_WORLD, but only for the processes which it shares a group with. The communicator may or may not be duplicated per process, but either way is nonblocking. 
-* Reduces I/O overhead compared to 
+* Non-blocking communication w.r.t. the simulation COMM_WORLD. Will not (_necessarily_) force synchronization across COMM_WORLD, while creating the communicator. The communicator may or may not be duplicated per process, but either way is nonblocking. 
+* Reduces some I/O overhead compared to MPI_Comm_split 
 
 __Con__
-* As simulation resolution increases, the memory load per process of keeping track of 
+* As simulation resolution increases, the initial memory load per process of keeping track of all the processes for the axisymmetric communicator may be very large (In the case of . 
+* For (2b), only blocking process-to-process communication is allowed. However, this only blocks the two processes sharing information with each other. 
 
 __Status Quo__
+* For (2a), have to use a collection of functions like MPI_Group_incl and exclusion function to modify the group. 
 
 __Sources__
+
+- http://pages.tacc.utexas.edu/~eijkhout/pcse/html/mpi-comm.html#Inter-communicators
+
+- https://www.mcs.anl.gov/research/projects/mpi/mpi-standard/mpi-report-1.1/node111.htm#Node111
+
+- https://www.mcs.anl.gov/research/projects/mpi/mpi-standard/mpi-report-1.1/node114.htm
+
 
 3. MPI Virtual Topology (distributed Graph or Cartesian Grid)
 
+The process keeps 
+
 __Pro__
 
 __Con__
@@ -126,8 +146,12 @@ __Con__
 __Status Quo__
 
 __Sources__
-https://www.mcs.anl.gov/~balaji/pubs/2011/eurompi/eurompi11.mpi-topology.pdf
-http://pages.tacc.utexas.edu/~eijkhout/pcse/html/mpi-topo.html
+
+- https://www.mcs.anl.gov/~balaji/pubs/2011/eurompi/eurompi11.mpi-topology.pdf
+
+- http://pages.tacc.utexas.edu/~eijkhout/pcse/html/mpi-topo.html
+
+- https://www3.nd.edu/~zxu2/acms60212-40212/Lec-08.pdf
 
 
 ## Algorithm for sharing the constraint matrix, then performing the constraint optimization. 
@@ -136,12 +160,21 @@ http://pages.tacc.utexas.edu/~eijkhout/pcse/html/mpi-topo.html
 
 1. Use collective communication methods. 
 
+* __[a]__ Allgather to all processes in group so they may solve the constraint matrix individually
+
+* __[b]__ Gather all matrices to a single process per axisymmetric group 
+
 2. Use MPI data types, packing, and defined structs. 
 
 3. Use shared memory regions
 
 One way to share it may be by creating a shared memory location (referred to as an MPI_Window) using MPI_Win_create. 
 
+https://www.mpich.org/static/docs/v3.2.x/www3/MPI_Win_create.html
+
+4. MPI has a facility for caching data through attachment to a communicator. 
+
+https://www.mcs.anl.gov/research/projects/mpi/mpi-standard/mpi-report-1.1/node118.htm#Node118
 
 __Sources__
 
@@ -152,3 +185,10 @@ __Sources__
 2. Make each MPI process tied only to a spatial mesh grid coordinate, (φ,r,z). Have each process call MPI_Spawn to generate worker processes representing the velocity phase plane or grid and use the created worker-process communicator to handle resampling. 
 
 ## Questions about original implementation
+
+1. XGCa already exists. Where should I be looking inside that codebase for how it handles axisymmetric communications? What is it already communicating axisymmetrically?
+
+2. 
+
+
+
