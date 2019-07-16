@@ -7,13 +7,14 @@ as respresentations prior to working out the idea further
 """
 
 class Particle():
-    def __init__(self, weight, velocity):
-        self.weight = weight # we'll make this an integer from 1-100
-        self.velocity = velocity # this should be np.float64
+    def __init__(self, weight, vp, mu):
+        self.weight = np.float32(weight)
+        self.vp = np.float64(vp)
+        self.mu = np.float64(mu)
 
 
 class Bin():
-    def __init__(self, plane_id, r, z, v):
+    def __init__(self):
         self.r = r # the spatial coordinate in terms of radial distance from
                    # center of torus
         self.z = z
