@@ -4,7 +4,10 @@ from mpi4py import MPI
 from data_structures.sim_structures import *
 
 
-def sim(num_nodes=20, vp_max=1.0, mu_max=1.0, npart_max=3, nnodes_plane=4):
+def sim(num_nodes=20, vp_max=1.0, mu_max=1.0, npart_max=3, 
+        nnodes_plane=4, vpsize=1, musize=1):
+
+    # MPI Init not needed
     sml_comm = MPI.COMM_WORLD
     num_procs = sml_comm.Get_size()
     procno = sml_comm.Get_rank()
@@ -29,18 +32,45 @@ def sim(num_nodes=20, vp_max=1.0, mu_max=1.0, npart_max=3, nnodes_plane=4):
         grid = None
 
 
-    print("Proc ", procno, "hitting barrier")
+    #print("Proc ", procno, "hitting barrier")
     sml_comm.Barrier()
-
     grid = sml_comm.bcast(grid, root=0)
+    #print("Proc", procno, "has grid", grid)
+    #sml_comm.Barrier()
 
-    print("Proc", procno, "has grid", grid)
+    #
+    # Assign nodes to processes
+    # 
+    nnodes_proc = np.int(num_nodes / num_procs)
 
-    sml_comm.Barier()
+    inode1 = np.int(procno * nnodes_proc)
+    inode2 = np.int(inode1 + nnodes_proc - 1)
 
-    start_node = 0
-    end_node = 1
+    #print("Proc", procno, "has nodes", inode1, "-", inode2)
 
+    #
+    # Create bins
+    #
+    bins = np.array((nnodes_proc, vpsize, musize), dtype=object)
+
+    # to keep it simple, we're just going to create a list of particles
+    # that this process in particular is dealing with, indexed by node #
+    local_ptls = [][]
+
+
+    #
+    # Share the constraint matrices
+    #
+
+    #
+    # Solve optimization
+    #
+
+    #
+    # 
+    #
+
+    # MPI Finalize not needed
     return 0
 
 

@@ -15,17 +15,12 @@ class Particle():
 
 class Bin():
     def __init__(self):
-        self.r = r # the spatial coordinate in terms of radial distance from
-                   # center of torus
-        self.z = z
-        self.v = (v[0], v[1]) # lower, upper bounds of velocity space
-                              # represented by this bin
-        self.plane_id = plane_id # φindex of the plane this bin is tied to
-        
-        self.particles = []   # Populate particles per bin during the sim
+        self.npart = np.int32(0)
+        self.ptl_inx = []
+        self.total_weight = np.int32()
 
-        self.constraints = np.array([0,0,0]) # build this with values after particles
-        self.constraint_mat = None # placeholder, build after particles added
+        self.constraints = np.zeros((5,), dtype=np.float32) 
+        self.constraint_mat = None 
 
 
     def add_particle(self, particle):
@@ -40,12 +35,13 @@ class Bin():
     
     def update_constraints(self):
         self.constraints[0] = sum(p.weight for p in self.particles)
-        self.constraints[1] = sum(w*v for w,v in zip([p.weight for p in self.particles], [p.velocity for p in self.particles]))
-        self.constraints[2] = sum(w*(v**2) for w,v in zip([p.weight for p in self.particles], [p.velocity for p in self.particles])) 
-
+        self.constraints[1] = sum(w*vp for w,vp in zip([p.weight for p in self.particles], [p.vp for p in self.particles]))
+        self.constraints[2] = sum(w*(vp**2) for w,vp in zip([p.weight for p in self.particles], [p.vp for p in self.particles])) 
+        self.constraints[3] = sum(w*mu for w,mu in zip([p.weight for p in self.particles], [p.mu for p in self.particles]))
+        self.constraints[4] = sum(w*(mu**2) for w,mu in zip([p.weight for p in self.particles], [p.mu for p in self.particles])) 
 
     def build_constraint_mat(self):
-        tmp = [[1.0, p.velocity, p.velocity**2] for p in self.particles]
+        tmp = [[1.0, p.vp, p.vp**2, p.mu, p.mu**2] for p in self.particles]
         self.constraint_mat = np.stack(tmp, axis=-1)
 
 
