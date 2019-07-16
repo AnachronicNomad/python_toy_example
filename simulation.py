@@ -51,24 +51,53 @@ def sim(num_nodes=20, vp_max=1.0, mu_max=1.0, npart_max=3,
     #
     # Create bins
     #
-    bins = np.array((nnodes_proc, vpsize, musize), dtype=object)
+    bins = np.empty(shape=(nnodes_proc, vpsize, musize), dtype=object)
+    print(bins.shape)
 
-    # to keep it simple, we're just going to create a list of particles
-    # that this process in particular is dealing with, indexed by node #
-    local_ptls = [][]
+    for bin_vp in range(0, vpsize):
+        for bin_mu in range(0, musize):
+            for nnode in range(inode1, inode2+1):
+                bin_ = Bin()
+
+                for ptl in grid[nnode][1]:
+                    bin_.add_particle(ptl)
+
+                print(bin_)
+
+                bin_.update_constraints()
+                bin_.update_constraint_mat()
+
+                node_idx = np.int(nnode % nnodes_proc)
+                bins[node_idx, bin_vp, bin_mu] = bin_
+
+    print("Proc", procno, "has the following constraint matrices:")
+    for bin_vp in range(0, vpsize):
+        for bin_mu in range(0, musize):
+            for nnode in range(inode1, inode2+1):
+                print("v para", bin_vp, "mu", bin_mu, "node", nnode)
+                node_idx = np.int(nnode % nnodes_proc)
+                print(bins_[node_idx, bin_vp, bin_mu].constraint_mat)
 
 
     #
     # Share the constraint matrices
     #
+    # The problem description is that: 
+    #
+    # 1. the constraint matrices per each bin on each node 
+    #    must be gathered together into 
+    # 
+
 
     #
     # Solve optimization
     #
 
+
     #
     # 
     #
+
 
     # MPI Finalize not needed
     return 0

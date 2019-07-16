@@ -16,8 +16,9 @@ class Particle():
 class Bin():
     def __init__(self):
         self.npart = np.int32(0)
-        self.ptl_inx = []
+        self.particles = []
         self.total_weight = np.int32()
+        self.bin_id = np.zeros((3,), dtype=np.int32)
 
         self.constraints = np.zeros((5,), dtype=np.float32) 
         self.constraint_mat = None 
