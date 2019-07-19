@@ -3,3 +3,5 @@ test_env/
 __pycache__/
 *.swp
 *.ipynb_checkpoints/
+*.mod
+*.or
