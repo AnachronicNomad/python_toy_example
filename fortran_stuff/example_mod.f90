@@ -1,49 +1,60 @@
-!!  Fortran example  
+!
+! The purpose of this module is to show an `nconstraint` row, with `npart`
+! columns matrix, in addition to a summed constraint vector; shared 
+! "axisymmetrically" 
+!
 module example_mod
   use mpi
 
   implicit none
   ! MPI 
   integer :: procno, numprocs, sml_comm, mpi_err
-  integer :: win
-  integer, dimension(:), allocatable :: shared_data
+  integer :: axi_color
+  integer :: axi_comm
 
   ! Sim data
-  integer :: loop_cntr
-  integer, dimension(:), allocatable :: local_data
+  integer, private :: resamp_musize             !< Number of sampling bins in v_perp/mu direction
+  integer, private :: resamp_vpsize             !< Number of sampling bins in v_para direction
+  integer, private :: resamp_inode1             !< Index of the first node of local patch of the configuration space mesh (=f0_inode1)
+  integer, private :: resamp_inode2             !< Index of the last node of local patch of the configuration space mesh (=f0_inode2)
+  type(resamp_bin_type)
+
+  type resamp_bin_type
+   integer :: npart                          !< particles in bin(old)
+   real (8), allocatable:: constraint(:)     !< bin moments
+   real (8), allocatable:: Cmat(:,:)         !< constraint matrix for new particles
+   integer :: nconstraint                    !< Number of constraints for optimization
+  end type resamp_bin_type
 
 contains
-  subroutine simulation_init()
+  subroutine simulation_init(inode1, inode2, vp_max, mu_max)
     !
     call MPI_INIT(mpi_err)
     call MPI_Comm_dup(MPI_COMM_WORLD, sml_comm, mpi_err)
     call MPI_COMM_RANK(MPI_COMM_WORLD, procno, mpi_err)
     call MPI_COMM_SIZE(MPI_COMM_WORLD, numprocs, mpi_err)
+    !
+  end subroutine
 
-    allocate(local_data(1:10))
+  subroutine share_mats()
+    !
+    type (resamp_bin_type), allocatable :: bins(:,:,:)
+    integer :: node,bmu,bvp
 
-    call MPI_Win_create_dynamic(MPI_INFO_NULL, sml_comm, win, mpi_err)
+
+
     !
   end subroutine
 
   subroutine sim()
     !
-    do loop_cntr=1,10
-      local_data(loop_cntr) = procno * loop_cntr
-    enddo
 
-    print *, 'proc', procno, 'has', local_data
-
-    call MPI_Win_attach(win, local_data, 10, mpi_err)
     !
   end subroutine
 
   subroutine teardown()
     !
-    call MPI_Win_detach(win, local_data)
-    deallocate(local_data)
 
-    call MPI_Win_free(win, mpi_err)
 
     call MPI_FINALIZE(mpi_err)
     !
