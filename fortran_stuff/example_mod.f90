@@ -17,7 +17,6 @@ module example_mod
   integer, private :: resamp_vpsize             !< Number of sampling bins in v_para direction
   integer, private :: resamp_inode1             !< Index of the first node of local patch of the configuration space mesh (=f0_inode1)
   integer, private :: resamp_inode2             !< Index of the last node of local patch of the configuration space mesh (=f0_inode2)
-  
 
   type resamp_bin_type
    integer :: npart                          !< particles in bin(old)
@@ -55,7 +54,7 @@ contains
           allocate(bins(node,bmu,bvp)%Cmat(bins(node,bmu,bvp)%nconstraint, bins(node,bmu,bvp)%npart))
 
           do i=1,bins(node,bmu,bvp)%nconstraint
-            bins(node,bmu,bvp)%constraint = real(1, 8)
+            bins(node,bmu,bvp)%constraint(i) = real(i+bvp+bmu, 8)
           enddo
 
           bins(node,bmu,bvp)%Cmat = real(procno, 8) 
@@ -65,19 +64,57 @@ contains
     !
   end subroutine
 
-  subroutine share_mats()
+  subroutine share_mats(nconstraint)
     !
     implicit none
     !type (resamp_bin_type), allocatable, intent(INOUT) :: bins(:,:,:)
     integer :: node,bmu,bvp
+    integer :: axi_pe, axi_pe_size
+    integer, intent(IN) :: nconstraint
+    real (8), allocatable :: constraint_recvbuf(:)
 
-    axi_color = (resamp_inode2 - resamp_inode1)
+    ! 
+    !  Create an axisymmetric communicator. 
+    ! Chances are, this can actually be handled by sml_intpl_comm, available from sml_module
+    !
+    axi_color = 1 !modulo((resamp_inode2 - resamp_inode1), procno+1)
     call MPI_Comm_split(sml_comm, axi_color, procno, axi_comm, mpi_err)
+    call MPI_COMM_RANK(axi_comm, axi_pe, mpi_err)
+    call MPI_COMM_SIZE(axi_comm, axi_pe_size, mpi_err)
+
+    allocate(constraint_recvbuf(1:nconstraint))
 
     do node=resamp_inode1,resamp_inode2
-      do bmu=1,resamp_mu_max
-        do bvp=1,resamp_vp_max
+      do bmu=1,resamp_musize
+        do bvp=1,resamp_vpsize
+          call MPI_Barrier(axi_comm, mpi_err)
 
+          !
+          ! Reduce the constraint vector onto root process of the axisymmetric communicator
+          !
+
+          call MPI_Reduce(bins(node,bmu,bvp)%constraint, constraint_recvbuf, nconstraint, &
+                          MPI_REAL8, MPI_SUM, 0, axi_comm, mpi_err)
+
+
+          if (axi_pe .eq. 0) then
+            print *, constraint_recvbuf
+          endif
+
+
+          ! 
+          ! Put the constraint matrices onto the root process for the axisymmetric communicator,
+          ! stack them
+          !
+
+          !
+          ! Do something
+          !
+
+          !
+          ! Broadcast back to matching bins
+          !
+          call MPI_Barrier(axi_comm, mpi_err)
         enddo
       enddo
     enddo
@@ -89,7 +126,7 @@ contains
     !
       implicit none
 
-      call share_mats()
+      call share_mats(5)
     !
   end subroutine
 
@@ -115,7 +152,7 @@ program example_prog
   call MPI_COMM_RANK(MPI_COMM_WORLD, procno, mpi_err)
   call MPI_COMM_SIZE(MPI_COMM_WORLD, numprocs, mpi_err)
 
-  call simulation_init(3*procno+1, 3*procno+3, 4, 4)
+  call simulation_init(3*procno+1, 3*procno+3, 2, 2)
 
   call sim()
 
