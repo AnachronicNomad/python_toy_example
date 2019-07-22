@@ -124,6 +124,7 @@ contains
                           0, axi_comm, mpi_err) ! root, comm, error_flag
 
           !print *, column_counts
+
           !
           ! Online documentation suggests some different approaches for using MPI_Gather
           ! 1. Use MPI_Type_create_subarray
@@ -131,6 +132,8 @@ contains
           ! 3. Define a struct type and go from there
           ! 4. Use MPI_Gatherv https://www.open-mpi.org/doc/v4.0/man3/MPI_Gatherv.3.php
           !
+          ! Further research suggests using MPI_Vector data types and Gatherv, as in 
+          ! this StackOverflow answer https://stackoverflow.com/a/38302499
 
           
           !
