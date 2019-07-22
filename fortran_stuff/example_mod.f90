@@ -51,13 +51,19 @@ contains
           bins(node,bmu,bvp)%npart = modulo(procno, numprocs) + 1
           bins(node,bmu,bvp)%nconstraint = 5
           allocate(bins(node,bmu,bvp)%constraint(1:bins(node,bmu,bvp)%nconstraint))
-          allocate(bins(node,bmu,bvp)%Cmat(bins(node,bmu,bvp)%nconstraint, bins(node,bmu,bvp)%npart))
+          allocate(bins(node,bmu,bvp)%Cmat( 1:bins(node,bmu,bvp)%nconstraint, 1:bins(node,bmu,bvp)%npart) )
 
           do i=1,bins(node,bmu,bvp)%nconstraint
             bins(node,bmu,bvp)%constraint(i) = real(i+bvp+bmu, 8)
           enddo
 
-          bins(node,bmu,bvp)%Cmat = real(procno, 8) 
+          do i=1,bins(node,bmu,bvp)%npart
+            bins(node,bmu,bvp)%Cmat(1,i)=bins(node,bmu,bvp)%npart
+            bins(node,bmu,bvp)%Cmat(2,i)=bins(node,bmu,bvp)%npart
+            bins(node,bmu,bvp)%Cmat(3,i)=bins(node,bmu,bvp)%npart
+            bins(node,bmu,bvp)%Cmat(4,i)=bins(node,bmu,bvp)%npart
+            bins(node,bmu,bvp)%Cmat(5,i)=bins(node,bmu,bvp)%npart
+          enddo
         enddo
       enddo
     enddo
@@ -71,7 +77,9 @@ contains
     integer :: node,bmu,bvp
     integer :: axi_pe, axi_pe_size
     integer, intent(IN) :: nconstraint
+    integer :: nparts
     real (8), allocatable :: constraint_recvbuf(:)
+    integer, allocatable :: column_counts(:)
 
     ! 
     !  Create an axisymmetric communicator. 
@@ -84,41 +92,65 @@ contains
 
     allocate(constraint_recvbuf(1:nconstraint))
 
+    if (axi_pe .eq. 0) then
+      allocate(column_counts(1:axi_pe_size))
+    endif
+
     do node=resamp_inode1,resamp_inode2
       do bmu=1,resamp_musize
         do bvp=1,resamp_vpsize
           call MPI_Barrier(axi_comm, mpi_err)
 
+          !print *, 'proc', procno, 'node', node, 'bmu', bmu, 'bvp', bvp
+
           !
           ! Reduce the constraint vector onto root process of the axisymmetric communicator
+          !
+          ! The sum of constraint vectors in the axisymmetric communicator is now there. 
           !
 
           call MPI_Reduce(bins(node,bmu,bvp)%constraint, constraint_recvbuf, nconstraint, &
                           MPI_REAL8, MPI_SUM, 0, axi_comm, mpi_err)
-
-
-          if (axi_pe .eq. 0) then
-            print *, constraint_recvbuf
-          endif
-
 
           ! 
           ! Put the constraint matrices onto the root process for the axisymmetric communicator,
           ! stack them
           !
 
+          ! count how many particles there are per Cmat in bin, a column count
+          
+          call MPI_Gather(bins(node,bmu,bvp)%npart, 1, MPI_INT, & ! sendbuf, sendcount, sendtype
+                          column_counts, 1, MPI_INT, & ! recvbuf, recvcount, recvtype
+                          0, axi_comm, mpi_err) ! root, comm, error_flag
+
+          !print *, column_counts
+          !
+          ! Online documentation suggests some different approaches for using MPI_Gather
+          ! 1. Use MPI_Type_create_subarray
+          ! 2. Convert to MPI_vector
+          ! 3. Define a struct type and go from there
+          ! 4. Use MPI_Gatherv https://www.open-mpi.org/doc/v4.0/man3/MPI_Gatherv.3.php
+          !
+
+          
           !
           ! Do something
           !
 
           !
-          ! Broadcast back to matching bins
+          ! Broadcast back to axisymmetric communicator
           !
+          
           call MPI_Barrier(axi_comm, mpi_err)
         enddo
       enddo
     enddo
 
+    if (allocated(column_counts)) then
+      deallocate()
+    endif
+
+    deallocate(constraint_recvbuf)
     !
   end subroutine
 
