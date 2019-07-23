@@ -100,12 +100,12 @@ program main
                    Gmat, rcounts, displs, vec_type, &
                    root, comm, ierr)
 
-  !if (procno .eq. root) then
-  !  print *, shape(Gmat)
-  !  do i=1,nrows
-  !    print *, Gmat(i,:)
-  !  enddo
-  !endif
+  if (procno .eq. root) then
+    print *, 'shape: ', shape(Gmat)
+    do i=1,nrows
+      print *, Gmat(i,:)
+    enddo
+  endif
 
 !======================================
 !! Do teardown and free
