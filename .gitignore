@@ -4,4 +4,4 @@ __pycache__/
 *.swp
 *.ipynb_checkpoints/
 *.mod
-*.or
+*.o
