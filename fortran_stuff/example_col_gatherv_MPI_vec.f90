@@ -5,7 +5,7 @@ program main
   !   2. ~~See if we can exploit Column-major ordering and contiguous memory 
   !     in Fortran to easily count and send the columns to be stacked on the
   !     receiving end. ~~ <- DONE, it works!!
-  !   3. Have arbitrary process ordering (rcount)
+  !   3. ~~Have arbitrary process ordering (rcount)~~ <- DONE
   !
   !
   use mpi
@@ -27,7 +27,7 @@ program main
 
   root = 0
 
-  ncols = procno
+  ncols = procno+1
 
 !======================================
 
@@ -39,20 +39,35 @@ program main
   allocate(vec(nrows,ncols))
   do i=1,nrows
     do j=1,ncols
-      vec(i,j) = procno + (0.1 * j)
+      vec(i,j) = real(10 * procno + j,kind=4)
     enddo
   enddo
 
-  call mpi_barrier(comm, ierr)
+  !print *, 'proc', procno, 'completed filling array with nrows', nrows, 'ncols', ncols
+  !print *, shape(vec)
+  !do i=1,nrows
+  !  print *, vec(i,:)
+  !enddo
+
+  if (procno .eq. root) then
+    allocate(rcounts(numprocs))
+  endif
+
+  call mpi_gather(ncols, 1, mpi_integer, &
+                  rcounts, 1, mpi_integer, &
+                  root, comm, ierr)
+
+  if (procno .eq. root) then
+    print *, rcounts 
+  endif
 
 !======================================
 
   if (procno .eq. root) then
-    allocate(Gvec(nrows, ncols*numprocs))
+    allocate(Gvec(nrows, sum(rcounts)))
     allocate(displs(numprocs))
-    allocate(rcounts(numprocs))
 
-    rcounts = (ncols)
+    !rcounts = (ncols)
     !print *, rcounts
 
     ! calculate displacements
