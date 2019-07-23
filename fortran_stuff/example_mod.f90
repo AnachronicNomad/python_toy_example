@@ -20,9 +20,12 @@ module example_mod
 
   type resamp_bin_type
    integer :: npart                          !< particles in bin(old)
+   integer :: bin_id(3)                      !< corresponding node number for Voronoi cell,velocity
+   !type(ptl_type), allocatable :: new_ptl(:) !< new particles generated in the bin
    real (8), allocatable:: constraint(:)     !< bin moments
    real (8), allocatable:: Cmat(:,:)         !< constraint matrix for new particles
    integer :: nconstraint                    !< Number of constraints for optimization
+
   end type resamp_bin_type
 
   type(resamp_bin_type), allocatable, private :: bins(:,:,:)
@@ -45,9 +48,9 @@ contains
     !
     ! Put some values into the bins
     !
-    do node=inode1,inode2
+    do bvp=1,vp_max
       do bmu=1,mu_max
-        do bvp=1,vp_max
+        do node=inode1,inode2
           bins(node,bmu,bvp)%npart = modulo(procno, numprocs) + 1
           bins(node,bmu,bvp)%nconstraint = 5
           allocate(bins(node,bmu,bvp)%constraint(1:bins(node,bmu,bvp)%nconstraint))
@@ -70,35 +73,50 @@ contains
     !
   end subroutine
 
-  subroutine share_mats(nconstraint)
+  subroutine share_mats(bins, nconstraint, num_part, Axi_Mat)
     !
     implicit none
-    !type (resamp_bin_type), allocatable, intent(INOUT) :: bins(:,:,:)
-    integer :: node,bmu,bvp
-    integer :: axi_pe, axi_pe_size
+    type (resamp_bin_type), intent(INOUT) :: bins(:,:,:)
+    real (8), allocatable, intent(INOUT) :: Axi_Mat
     integer, intent(IN) :: nconstraint
+
+    integer :: node,bmu,bvp,iProcs,offsets                 !< Loop counter
+    integer :: axi_pe, axi_pe_size, root, vec_type  !< MPI_Object reference handles
     integer :: nparts
-    real (8), allocatable :: constraint_recvbuf(:)
-    integer, allocatable :: column_counts(:)
+    real (8), allocatable :: constraint_sum(:)
+    integer, allocatable :: nparts_bins(:), displs(:)
 
     ! 
     !  Create an axisymmetric communicator. 
     ! Chances are, this can actually be handled by sml_intpl_comm, available from sml_module
     !
+
     axi_color = 1 !modulo((resamp_inode2 - resamp_inode1), procno+1)
+    ! ^^^ this can also be done by modulo(grid%nnode, inode1) as long as node numbering is 1-indexed
     call MPI_Comm_split(sml_comm, axi_color, procno, axi_comm, mpi_err)
     call MPI_COMM_RANK(axi_comm, axi_pe, mpi_err)
     call MPI_COMM_SIZE(axi_comm, axi_pe_size, mpi_err)
 
-    allocate(constraint_recvbuf(1:nconstraint))
+    root = 0
 
-    if (axi_pe .eq. 0) then
-      allocate(column_counts(1:axi_pe_size))
+    !======================================
+    !! Define the vector type that we're going to use to transfer columns 
+    !! of {nconstraint}x{1->procno} sub-matrix on each process
+
+    call mpi_type_vector(1, nrows, nrows, mpi_real8, vec_type, mpi_err)
+    call mpi_type_commit(vec_type, mpi_err)
+
+    !======================================
+
+    if (axi_pe .eq. root) then
+      allocate(constraint_sum(1:nconstraint))
+      allocate(nparts_bins(1:axi_pe_size))
+      allocate(displs(axi_pe_size))
     endif
 
-    do node=resamp_inode1,resamp_inode2
-      do bmu=1,resamp_musize
-        do bvp=1,resamp_vpsize
+    do bvp=1,vp_max
+      do bmu=1,mu_max
+        do node=inode1,inode2
           call MPI_Barrier(axi_comm, mpi_err)
 
           !print *, 'proc', procno, 'node', node, 'bmu', bmu, 'bvp', bvp
@@ -109,36 +127,56 @@ contains
           ! The sum of constraint vectors in the axisymmetric communicator is now there. 
           !
 
-          call MPI_Reduce(bins(node,bmu,bvp)%constraint, constraint_recvbuf, nconstraint, &
-                          MPI_REAL8, MPI_SUM, 0, axi_comm, mpi_err)
+          call MPI_Reduce(bins(node,bmu,bvp)%constraint, nconstraint, MPI_REAL8, &
+                          MPI_SUM, root, axi_comm, mpi_err)
 
-          ! 
-          ! Put the constraint matrices onto the root process for the axisymmetric communicator,
-          ! stack them
-          !
+          nparts = bins(node,bmu,bvp)%npart ! + size(bins(node,bmu,bvp)%new_ptl)
 
-          ! count how many particles there are per Cmat in bin, a column count
-          
-          call MPI_Gather(bins(node,bmu,bvp)%npart, 1, MPI_INT, & ! sendbuf, sendcount, sendtype
-                          column_counts, 1, MPI_INT, & ! recvbuf, recvcount, recvtype
-                          0, axi_comm, mpi_err) ! root, comm, error_flag
+          ! count how many particles there are per bin 
+          call MPI_Gather(nparts, 1, MPI_INT, & ! sendbuf, sendcount, sendtype
+                          nparts_bins, 1, MPI_INT, &              ! recvbuf, recvcount, recvtype
+                          root, axi_comm, mpi_err)                   ! root, comm, error_flag
 
-          !print *, column_counts
 
-          !
-          ! Online documentation suggests some different approaches for using MPI_Gather
-          ! 1. Use MPI_Type_create_subarray
-          ! 2. Convert to MPI_vector
-          ! 3. Define a struct type and go from there
-          ! 4. Use MPI_Gatherv https://www.open-mpi.org/doc/v4.0/man3/MPI_Gatherv.3.php
-          !
-          ! Further research suggests using MPI_Vector data types and Gatherv, as in 
-          ! this StackOverflow answer https://stackoverflow.com/a/38302499
+          !======================================
+          !! Root (receving process) will use the total column counts (rcounts)
+          !! to allocate the Global matrix. 
+          !! Then, the displacement/offset of memory region inside the 
+          !! global matrix is just multiples of data type that we defined
+          if (axi_pe .eq. root) then
+            allocate(Axi_Mat(nconstraint, sum(nparts_bins)))
+            allocate(displs(axi_pe_size))
 
+            ! calculate displacements of each vector
+            offset = 0
+            do iProcs = 1,axi_pe_size
+              displs(iProcs) = offset
+              offset = offset + nparts_bins(iProcs)
+            enddo
+            !print *, displs
+          endif
+
+          !======================================
+          !! Use "variable-length" gather to place all the matrices in order
+          !! onto the root process, which will do the indexing. 
+
+          call mpi_gatherv(bins(node,bmu,bvp)%Cmat, nparts, vec_type, &
+                           Axi_Mat, nparts_bins, displs, vec_type, &
+                           root, axi_comm, mpi_err)
+
+          !if (axi_pe .eq. root) then
+          !  print *, 'shape: ', shape(Gmat)
+          !  do i=1,nrows
+          !    print *, Gmat(i,:)
+          !  enddo
+          !endif
           
           !
           ! Do something
           !
+          if (axi_pe .eq. root) then
+            ! solve optimization here
+          endif
 
           !
           ! Broadcast back to axisymmetric communicator
@@ -149,11 +187,6 @@ contains
       enddo
     enddo
 
-    if (allocated(column_counts)) then
-      deallocate()
-    endif
-
-    deallocate(constraint_recvbuf)
     !
   end subroutine
 
@@ -161,7 +194,7 @@ contains
     !
       implicit none
 
-      call share_mats(5)
+      call share_mats()
     !
   end subroutine
 
