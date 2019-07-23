@@ -2,19 +2,20 @@ program main
   !
   ! TODO:
   !   1. DONE, blocks and offset size working correctly.
-  !   2. See if we can exploit Column-major ordering and contiguous memory 
+  !   2. ~~See if we can exploit Column-major ordering and contiguous memory 
   !     in Fortran to easily count and send the columns to be stacked on the
-  !     receiving end. 
+  !     receiving end. ~~ <- DONE, it works!!
+  !   3. Have arbitrary process ordering (rcount)
   !
   !
   use mpi
 
   implicit none
   integer :: ierr, procno, numprocs, root, comm, vec_type !! MPI values
-  integer :: iProcs, offset, ncols !! loop iterators, indices
-  integer, parameter :: nrows
+  integer :: iProcs, offset, ncols, i, j !! loop iterators, indices
+  integer, parameter :: nrows = 5
 
-  real(kind=8), allocatable :: vec(:), Gvec(:)
+  real(kind=4), allocatable :: vec(:,:), Gvec(:,:)
   integer, allocatable :: displs(:), rcounts(:)
 
 !======================================
@@ -26,25 +27,32 @@ program main
 
   root = 0
 
+  ncols = procno
+
 !======================================
 
-  ! NOTE> First arg (count) is number of blocks defn in later args
-  call mpi_type_vector(1, 4, 4, mpi_real8, vec_type, ierr)
+  call mpi_type_vector(1, nrows, nrows, mpi_real4, vec_type, ierr)
   call mpi_type_commit(vec_type, ierr)
 
 !======================================
 
-  allocate(vec(8))
-  vec(:) = real(procno, 8)
+  allocate(vec(nrows,ncols))
+  do i=1,nrows
+    do j=1,ncols
+      vec(i,j) = procno + (0.1 * j)
+    enddo
+  enddo
 
-  !print *, vec
+  call mpi_barrier(comm, ierr)
+
+!======================================
 
   if (procno .eq. root) then
-    allocate(Gvec(numprocs * 8))
+    allocate(Gvec(nrows, ncols*numprocs))
     allocate(displs(numprocs))
     allocate(rcounts(numprocs))
 
-    rcounts = 8
+    rcounts = (ncols)
     !print *, rcounts
 
     ! calculate displacements
@@ -53,16 +61,20 @@ program main
       displs(iProcs) = offset
       offset = offset + rcounts(iProcs)
     enddo
+    !print *, displs
   endif 
 
 !======================================
 
-  call mpi_gatherv(vec, 2, vec_type, &
-                   Gvec, rcounts, displs, mpi_real8, &
+  call mpi_gatherv(vec, ncols, vec_type, &
+                   Gvec, rcounts, displs, vec_type, &
                    root, comm, ierr)
 
   if (procno .eq. root) then
-    print *, Gvec
+    print *, shape(Gvec)
+    do i=1,nrows
+      print *, Gvec(i,:)
+    enddo
   endif
 
 !======================================
