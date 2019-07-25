@@ -18,10 +18,14 @@ module example_mod
   integer, private :: resamp_inode1             !< Index of the first node of local patch of the configuration space mesh (=f0_inode1)
   integer, private :: resamp_inode2             !< Index of the last node of local patch of the configuration space mesh (=f0_inode2)
 
+  type ptl_type
+  !!! THIS IS A PLACEHOLDER FOR COMPILATION
+  end type ptl_type
+
   type resamp_bin_type
    integer :: npart                          !< particles in bin(old)
    integer :: bin_id(3)                      !< corresponding node number for Voronoi cell,velocity
-   !type(ptl_type), allocatable :: new_ptl(:) !< new particles generated in the bin
+   type(ptl_type), allocatable :: new_ptl(:) !< new particles generated in the bin
    real (8), allocatable:: constraint(:)     !< bin moments
    real (8), allocatable:: Cmat(:,:)         !< constraint matrix for new particles
    integer :: nconstraint                    !< Number of constraints for optimization
@@ -73,10 +77,12 @@ contains
     !
   end subroutine
 
-  subroutine share_mats(bins, nconstraint, num_part, Axi_Mat)
+  !======================================
+  !! This example 
+  subroutine share_mats(bins, nconstraint, Axi_Mat, weights)
     !
     implicit none
-    type (resamp_bin_type), intent(INOUT) :: bins(:,:,:)
+    type (resamp_bin_type), intent(IN) :: bins(:,:,:)
     real (8), allocatable, intent(INOUT) :: Axi_Mat
     integer, intent(IN) :: nconstraint
 
@@ -90,7 +96,7 @@ contains
     !  Create an axisymmetric communicator. 
     ! Chances are, this can actually be handled by sml_intpl_comm, available from sml_module
     !
-
+ 
     axi_color = 1 !modulo((resamp_inode2 - resamp_inode1), procno+1)
     ! ^^^ this can also be done by modulo(grid%nnode, inode1) as long as node numbering is 1-indexed
     call MPI_Comm_split(sml_comm, axi_color, procno, axi_comm, mpi_err)
@@ -102,6 +108,10 @@ contains
     !======================================
     !! Define the vector type that we're going to use to transfer columns 
     !! of {nconstraint}x{1->procno} sub-matrix on each process
+    !! 
+    !! NOTE :> This should probably be done during any initialization, it can 
+    !! be declared during the setup for any of the resampling procedures, and this way,
+    !! it isn't being called and committed to the MPI instance each time it is called. 
 
     call mpi_type_vector(1, nrows, nrows, mpi_real8, vec_type, mpi_err)
     call mpi_type_commit(vec_type, mpi_err)
@@ -114,33 +124,33 @@ contains
       allocate(displs(axi_pe_size))
     endif
 
-    do bvp=1,vp_max
-      do bmu=1,mu_max
-        do node=inode1,inode2
-          call MPI_Barrier(axi_comm, mpi_err)
-
-          !print *, 'proc', procno, 'node', node, 'bmu', bmu, 'bvp', bvp
+    do bvp=1,resamp_vpsize
+      do bmu=1,resamp_musize
+        do node=resamp_inode1,resamp_inode2
+          call MPI_Barrier(axi_comm, mpi_err) !< This may actually be unnecessary
 
           !
           ! Reduce the constraint vector onto root process of the axisymmetric communicator
           !
-          ! The sum of constraint vectors in the axisymmetric communicator is now there. 
-          !
 
-          call MPI_Reduce(bins(node,bmu,bvp)%constraint, nconstraint, MPI_REAL8, &
+          ! Sum the constraint vectors into recvbuf `constraint_sum` on axisymmetric root process
+          call MPI_Reduce(bins(node,bmu,bvp)%constraint, constraint_sum, nconstraint, MPI_REAL8, &
                           MPI_SUM, root, axi_comm, mpi_err)
 
+
+          ! Number of columns to send is the number of particles --- should this actually just be 
+          ! size(new_ptl)? 
           nparts = bins(node,bmu,bvp)%npart ! + size(bins(node,bmu,bvp)%new_ptl)
 
-          ! count how many particles there are per bin 
+          ! Gather the particle counts onto the root process for allocating Axi_Mat later.  
           call MPI_Gather(nparts, 1, MPI_INT, & ! sendbuf, sendcount, sendtype
                           nparts_bins, 1, MPI_INT, &              ! recvbuf, recvcount, recvtype
                           root, axi_comm, mpi_err)                   ! root, comm, error_flag
 
 
           !======================================
-          !! Root (receving process) will use the total column counts (rcounts)
-          !! to allocate the Global matrix. 
+          !! Root (receving process) will use the total column counts (nparts_bins)
+          !! to allocate the axisymmetric matrix. 
           !! Then, the displacement/offset of memory region inside the 
           !! global matrix is just multiples of data type that we defined
           if (axi_pe .eq. root) then
@@ -164,13 +174,6 @@ contains
                            Axi_Mat, nparts_bins, displs, vec_type, &
                            root, axi_comm, mpi_err)
 
-          !if (axi_pe .eq. root) then
-          !  print *, 'shape: ', shape(Gmat)
-          !  do i=1,nrows
-          !    print *, Gmat(i,:)
-          !  enddo
-          !endif
-          
           !
           ! Do something
           !
@@ -182,7 +185,7 @@ contains
           ! Broadcast back to axisymmetric communicator
           !
           
-          call MPI_Barrier(axi_comm, mpi_err)
+          call MPI_Barrier(axi_comm, mpi_err) !< Don't know if this is necessary
         enddo
       enddo
     enddo
