@@ -78,7 +78,9 @@ contains
   end subroutine
 
   !======================================
-  !! This example 
+  !! This example uses collective communication to fill a reference to Axi_mat. 
+  !! Should return a filled "weights" vector for use elsewhere.
+  !! TODO ^^^^^
   subroutine share_mats(bins, nconstraint, Axi_Mat, weights)
     !
     implicit none
